@@ -26,7 +26,7 @@ class ProofAPI:
         self.users_api = UsersAPI(api_client)
         self.labels_api = LabelsAPI(api_client)
 
-    def get_proof_metadata_collection(self, limit=500, sort_by="uploadedOn", sort_direction="desc", object_type=None, object_id=None, raw=False):
+    def get_proof_metadata_collection(self, limit=500, sort_by="uploadedOn", sort_direction="desc", object_type=None, object_id=None, owned_by_me=None, search=None, raw=False):
         """
         Retrieve all proof metadata for an organization, control, label, or task, with pagination support.
 
@@ -40,7 +40,7 @@ class ProofAPI:
         :return: List of all available proof metadata.
         """
         all_proofs = []
-        next_token = None
+        offset_token = None
 
         while True:
             # Prepare the parameters for the API call
@@ -50,7 +50,9 @@ class ProofAPI:
                 'sortDirection': sort_direction,
                 'objectType': object_type,
                 'objectId': object_id,
-                'nextToken': next_token
+                'ownedByMe': owned_by_me,
+                'search': search,
+                'offset': offset_token
             }
 
             # Make the API call
@@ -62,11 +64,11 @@ class ProofAPI:
 
             all_proofs.extend(response.get('data', []))
 
-            # Check for the continuation token (nextToken) to determine if more data needs to be fetched
-            next_token = response.get('continuationToken', None)
+            # Check for the offset token to determine if more data needs to be fetched
+            offset_token = response.get('offsetToken', None)
 
             # If no nextToken is returned, we have retrieved all data
-            if not next_token:
+            if not offset_token:
                 break
 
         # Return all accumulated proofs
@@ -86,7 +88,7 @@ class ProofAPI:
         """
         return self.client.get(self.BASE_URL, f"/{proof_id}", raw=raw)
 
-    def add_proof(self, file_path, object_id=None, object_type=None, raw=False):
+    def add_proof(self, file_path, raw=False):
         """
         Upload a new proof file to the organization.
 
@@ -97,12 +99,8 @@ class ProofAPI:
         :return: Response data of the newly added proof.
         """
         with open(file_path, 'rb') as file:
-            files = {'file': file}
-            data = {}
-            if object_id and object_type:
-                data['objectId'] = object_id
-                data['objectType'] = object_type
-            return self.client.post(self.BASE_URL, "/", files=files, data=data, raw=raw)
+            files = {'proof': file}
+            return self.client.post(self.BASE_URL, "/", files=files, data=None, raw=raw)
 
     def add_proof_version(self, proof_id, file_path, raw=False):
         """
@@ -114,7 +112,7 @@ class ProofAPI:
         :return: Response data of the updated proof.
         """
         with open(file_path, 'rb') as file:
-            files = {'file': file}
+            files = {'proof': file}
             return self.client.post(self.BASE_URL, f"/{proof_id}/versions", files=files, raw=raw)
 
     def get_proof_contents(self, proof_id, version=None, raw=False):
@@ -168,7 +166,7 @@ class ProofAPI:
 
         # Fetch proofs with optional object_type and object_id filtering
         limit = 500
-        next_token = None
+        offset_token = None
         all_proofs = []
 
         while True:
@@ -179,7 +177,7 @@ class ProofAPI:
                 'sortDirection': 'desc',
                 'objectType': object_type,
                 'objectId': object_id,
-                'nextToken': next_token
+                'offset': offset_token
             }
 
             all_proofs_response = self.client.get(self.BASE_URL, '/', params=params, raw=False)
@@ -190,11 +188,11 @@ class ProofAPI:
             # Extend the list with data from the current response
             all_proofs.extend(all_proofs_response.get('data', []))
 
-            # Check for continuationToken to determine if more results exist
-            next_token = all_proofs_response.get('continuationToken', None)
+            # Check for offsetToken to determine if more results exist
+            offset_token = all_proofs_response.get('offsetToken', None)
 
             # If no continuationToken is returned, all results have been fetched
-            if not next_token:
+            if not offset_token:
                 break
 
         # Filter the returned proofs based on the createdBy field matching the filtered users
@@ -236,7 +234,7 @@ class ProofAPI:
 
         # Fetch proofs associated with the label using its ID
         all_proofs = []
-        next_token = None
+        offset_token = None
 
         while True:
             # Prepare parameters for fetching proofs
@@ -246,7 +244,7 @@ class ProofAPI:
                 'sortDirection': sort_direction,
                 'objectType': 'label',
                 'objectId': label_id,
-                'nextToken': next_token
+                'offset': offset_token
             }
 
             # Make the API request and handle errors via the core _handle_response method
@@ -261,9 +259,9 @@ class ProofAPI:
 
             all_proofs.extend(response.get('data', []))
 
-            # Check for continuationToken to fetch more data if available
-            next_token = response.get('continuationToken', None)
-            if not next_token:
+            # Check for offsetToken to fetch more data if available
+            offset_token = response.get('offsetToken', None)
+            if not offset_token:
                 break
 
         return all_proofs if not raw else response

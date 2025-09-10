@@ -39,6 +39,9 @@ logger.addHandler(ch)
 # OAuth token endpoint for Hyperproof's authentication.
 TOKEN_ENDPOINT = "https://accounts.hyperproof.app/oauth/token"
 
+# Default network timeout for all HTTP requests (in seconds)
+REQUEST_TIMEOUT_SECONDS = 30
+
 class APIClient:
     """
     The APIClient class handles authentication via OAuth2 and makes HTTP requests to the Hyperproof API.
@@ -117,10 +120,11 @@ class APIClient:
             logger.debug("Access token not found. Re-authenticating...")
             self._authenticate()  # Re-authenticate if no valid access token is available.
         
-        # Headers for the API request, including the Authorization token and content type.
+        # Headers for the API request. Do not set Content-Type here to allow
+        # requests to set appropriate multipart boundaries for file uploads.
         headers = {
             'Authorization': f'Bearer {self.access_token}',
-            'Content-Type': 'application/json'
+            'Accept': 'application/json'
         }
         logger.debug(f"Request headers: {json.dumps(headers, indent=2)}")
         return headers
@@ -139,7 +143,12 @@ class APIClient:
         
         try:
             # Sending the GET request with appropriate headers and parameters.
-            response = requests.get(url, headers=self._get_headers(), params=params)
+            response = requests.get(
+                url,
+                headers=self._get_headers(),
+                params={k: v for k, v in (params or {}).items() if v is not None},
+                timeout=REQUEST_TIMEOUT_SECONDS
+            )
             
             # Log the response status and body for debugging purposes.
             logger.debug(f"GET response status code: {response.status_code}")
@@ -163,15 +172,31 @@ class APIClient:
         """
         url = f"{base_url}{endpoint}"
         logger.debug(f"Sending POST request to: {url}")
-        logger.debug(f"POST request data: {json.dumps(data, indent=2)}")
-        logger.debug(f"POST request files: {files}")
+        try:
+            logger.debug(f"POST request data: {json.dumps(data, indent=2)}")
+        except Exception:
+            logger.debug("POST request data: <non-serializable or None>")
+        logger.debug(f"POST request files: {files is not None}")
         
         try:
             # Sending the POST request, handling both JSON and file uploads.
             if files:
-                response = requests.post(url, headers=self._get_headers(), files=files)
+                # For multipart, pass additional fields via 'data' and let requests set Content-Type
+                headers = self._get_headers()
+                response = requests.post(
+                    url,
+                    headers=headers,
+                    files=files,
+                    data={k: v for k, v in (data or {}).items() if v is not None},
+                    timeout=REQUEST_TIMEOUT_SECONDS
+                )
             else:
-                response = requests.post(url, headers=self._get_headers(), json=data)
+                response = requests.post(
+                    url,
+                    headers=self._get_headers(),
+                    json={k: v for k, v in (data or {}).items() if v is not None},
+                    timeout=REQUEST_TIMEOUT_SECONDS
+                )
             
             logger.debug(f"POST response status code: {response.status_code}")
             logger.debug(f"POST response headers: {json.dumps(dict(response.headers), indent=2)}")
@@ -196,7 +221,12 @@ class APIClient:
         
         try:
             # Sending the PUT request with the provided data.
-            response = requests.put(url, headers=self._get_headers(), json=data)
+            response = requests.put(
+                url,
+                headers=self._get_headers(),
+                json={k: v for k, v in (data or {}).items() if v is not None},
+                timeout=REQUEST_TIMEOUT_SECONDS
+            )
             
             logger.debug(f"PUT response status code: {response.status_code}")
             logger.debug(f"PUT response headers: {json.dumps(dict(response.headers), indent=2)}")
@@ -221,8 +251,13 @@ class APIClient:
         
         try:
             # Sending the PATCH request with the provided data.
-            response = requests.patch(url, headers=self._get_headers(), json=data)
-            
+            response = requests.patch(
+                url,
+                headers=self._get_headers(),
+                json={k: v for k, v in (data or {}).items() if v is not None},
+                timeout=REQUEST_TIMEOUT_SECONDS
+            )
+
             logger.debug(f"PATCH response status code: {response.status_code}")
             logger.debug(f"PATCH response headers: {json.dumps(dict(response.headers), indent=2)}")
             logger.debug(f"PATCH response body: {response.text}")
@@ -230,6 +265,29 @@ class APIClient:
             return self._handle_response(response, raw=raw)
         except Exception as e:
             logger.error(f"PATCH request failed: {e}")
+            return None
+
+    def delete(self, base_url, endpoint, params=None, raw=False):
+        """
+        Sends a DELETE request to the specified API endpoint.
+        - base_url: The base URL for the API.
+        - endpoint: The specific API endpoint to interact with.
+        - params: Optional query parameters to include in the request.
+        - raw: If True, returns the raw response body; otherwise, returns parsed JSON.
+        """
+        url = f"{base_url}{endpoint}"
+        logger.debug(f"Sending DELETE request to: {url}")
+        try:
+            response = requests.delete(
+                url,
+                headers=self._get_headers(),
+                params={k: v for k, v in (params or {}).items() if v is not None},
+                timeout=REQUEST_TIMEOUT_SECONDS
+            )
+            
+            return self._handle_response(response, raw=raw)
+        except Exception as e:
+            logger.error(f"DELETE request failed: {e}")
             return None
 
     def _handle_response(self, response, raw=False):

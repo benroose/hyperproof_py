@@ -113,6 +113,7 @@ class TasksAPI:
         """
         with open(file_path, 'rb') as file:
             files = {'proof': file}
+            # Additional metadata must be sent as multipart form fields (not JSON)
             data = {
                 "hp-proof-owned-by": proof_owned_by,
                 "hp-proof-source": proof_source,

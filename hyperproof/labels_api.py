@@ -98,7 +98,7 @@ class LabelsAPI:
         :return: Response data of the newly uploaded proof.
         """
         with open(file_path, 'rb') as file:
-            files = {'file': file}
+            files = {'proof': file}
             return self.client.post(self.BASE_URL, f"/{label_id}/proof", files=files, raw=raw)
 
 

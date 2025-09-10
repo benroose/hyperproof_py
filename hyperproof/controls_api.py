@@ -112,7 +112,7 @@ class ControlsAPI:
         :return: Response data of the newly uploaded proof.
         """
         with open(file_path, 'rb') as file:
-            files = {'file': file}
+            files = {'proof': file}
             return self.client.post(self.BASE_URL, f"/{control_id}/proof", files=files, raw=raw)
 
     def get_controls_by_user(self, userid=None, givenName=None, surname=None, raw=False):
