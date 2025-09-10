@@ -14,6 +14,8 @@
 
 import requests
 import logging
+import time
+import random
 from requests.exceptions import HTTPError, RequestException, Timeout, ConnectionError
 import json
 
@@ -41,6 +43,8 @@ TOKEN_ENDPOINT = "https://accounts.hyperproof.app/oauth/token"
 
 # Default network timeout for all HTTP requests (in seconds)
 REQUEST_TIMEOUT_SECONDS = 30
+MAX_RETRIES = 3
+BACKOFF_BASE_SECONDS = 1.0
 
 class APIClient:
     """
@@ -141,25 +145,7 @@ class APIClient:
         logger.debug(f"Sending GET request to: {url}")
         logger.debug(f"GET request params: {json.dumps(params, indent=2)}")
         
-        try:
-            # Sending the GET request with appropriate headers and parameters.
-            response = requests.get(
-                url,
-                headers=self._get_headers(),
-                params={k: v for k, v in (params or {}).items() if v is not None},
-                timeout=REQUEST_TIMEOUT_SECONDS
-            )
-            
-            # Log the response status and body for debugging purposes.
-            logger.debug(f"GET response status code: {response.status_code}")
-            logger.debug(f"GET response headers: {json.dumps(dict(response.headers), indent=2)}")
-            logger.debug(f"GET response body: {response.text}")
-            
-            return self._handle_response(response, raw=raw)
-        except Exception as e:
-            # Log any exceptions that occur during the GET request.
-            logger.error(f"GET request failed: {e}")
-            return None
+        return self._send_request("GET", url, params=params, raw=raw)
 
     def post(self, base_url, endpoint, data=None, files=None, raw=False):
         """
@@ -177,35 +163,7 @@ class APIClient:
         except Exception:
             logger.debug("POST request data: <non-serializable or None>")
         logger.debug(f"POST request files: {files is not None}")
-        
-        try:
-            # Sending the POST request, handling both JSON and file uploads.
-            if files:
-                # For multipart, pass additional fields via 'data' and let requests set Content-Type
-                headers = self._get_headers()
-                response = requests.post(
-                    url,
-                    headers=headers,
-                    files=files,
-                    data={k: v for k, v in (data or {}).items() if v is not None},
-                    timeout=REQUEST_TIMEOUT_SECONDS
-                )
-            else:
-                response = requests.post(
-                    url,
-                    headers=self._get_headers(),
-                    json={k: v for k, v in (data or {}).items() if v is not None},
-                    timeout=REQUEST_TIMEOUT_SECONDS
-                )
-            
-            logger.debug(f"POST response status code: {response.status_code}")
-            logger.debug(f"POST response headers: {json.dumps(dict(response.headers), indent=2)}")
-            logger.debug(f"POST response body: {response.text}")
-            
-            return self._handle_response(response, raw=raw)
-        except Exception as e:
-            logger.error(f"POST request failed: {e}")
-            return None
+        return self._send_request("POST", url, json=data if not files else None, files=files, data=data if files else None, raw=raw)
 
     def put(self, base_url, endpoint, data=None, raw=False):
         """
@@ -219,23 +177,7 @@ class APIClient:
         logger.debug(f"Sending PUT request to: {url}")
         logger.debug(f"PUT request data: {json.dumps(data, indent=2)}")
         
-        try:
-            # Sending the PUT request with the provided data.
-            response = requests.put(
-                url,
-                headers=self._get_headers(),
-                json={k: v for k, v in (data or {}).items() if v is not None},
-                timeout=REQUEST_TIMEOUT_SECONDS
-            )
-            
-            logger.debug(f"PUT response status code: {response.status_code}")
-            logger.debug(f"PUT response headers: {json.dumps(dict(response.headers), indent=2)}")
-            logger.debug(f"PUT response body: {response.text}")
-            
-            return self._handle_response(response, raw=raw)
-        except Exception as e:
-            logger.error(f"PUT request failed: {e}")
-            return None
+        return self._send_request("PUT", url, json=data, raw=raw)
 
     def patch(self, base_url, endpoint, data=None, raw=False):
         """
@@ -249,23 +191,7 @@ class APIClient:
         logger.debug(f"Sending PATCH request to: {url}")
         logger.debug(f"PATCH request data: {json.dumps(data, indent=2)}")
         
-        try:
-            # Sending the PATCH request with the provided data.
-            response = requests.patch(
-                url,
-                headers=self._get_headers(),
-                json={k: v for k, v in (data or {}).items() if v is not None},
-                timeout=REQUEST_TIMEOUT_SECONDS
-            )
-
-            logger.debug(f"PATCH response status code: {response.status_code}")
-            logger.debug(f"PATCH response headers: {json.dumps(dict(response.headers), indent=2)}")
-            logger.debug(f"PATCH response body: {response.text}")
-            
-            return self._handle_response(response, raw=raw)
-        except Exception as e:
-            logger.error(f"PATCH request failed: {e}")
-            return None
+        return self._send_request("PATCH", url, json=data, raw=raw)
 
     def delete(self, base_url, endpoint, params=None, raw=False):
         """
@@ -277,18 +203,88 @@ class APIClient:
         """
         url = f"{base_url}{endpoint}"
         logger.debug(f"Sending DELETE request to: {url}")
-        try:
-            response = requests.delete(
-                url,
-                headers=self._get_headers(),
-                params={k: v for k, v in (params or {}).items() if v is not None},
-                timeout=REQUEST_TIMEOUT_SECONDS
-            )
-            
-            return self._handle_response(response, raw=raw)
-        except Exception as e:
-            logger.error(f"DELETE request failed: {e}")
-            return None
+        return self._send_request("DELETE", url, params=params, raw=raw)
+
+    def _send_request(self, method, url, params=None, json=None, files=None, data=None, raw=False):
+        """
+        Internal helper to send HTTP requests with retries and 401 refresh.
+        Retries on 429 and 5xx responses, and on common transient exceptions.
+        On 401, re-authenticates once and retries immediately.
+        """
+        filtered_params = {k: v for k, v in (params or {}).items() if v is not None}
+        filtered_json = {k: v for k, v in (json or {}).items() if v is not None} if json else None
+        filtered_data = {k: v for k, v in (data or {}).items() if v is not None} if data else None
+
+        # Attempt counter for retryable status codes
+        for attempt in range(0, MAX_RETRIES + 1):
+            try:
+                response = requests.request(
+                    method,
+                    url,
+                    headers=self._get_headers(),
+                    params=filtered_params if filtered_params else None,
+                    json=filtered_json if (files is None) else None,
+                    files=files,
+                    data=filtered_data if files else None,
+                    timeout=REQUEST_TIMEOUT_SECONDS
+                )
+
+                status = response.status_code
+
+                # Handle 401: try to refresh token once per request
+                if status == 401:
+                    logger.warning("Received 401 Unauthorized. Attempting to refresh token and retry once.")
+                    self._authenticate()
+                    response = requests.request(
+                        method,
+                        url,
+                        headers=self._get_headers(),
+                        params=filtered_params if filtered_params else None,
+                        json=filtered_json if (files is None) else None,
+                        files=files,
+                        data=filtered_data if files else None,
+                        timeout=REQUEST_TIMEOUT_SECONDS
+                    )
+                    status = response.status_code
+
+                # Retry on 429 or 5xx
+                if status == 429 or (500 <= status < 600):
+                    if attempt < MAX_RETRIES:
+                        retry_after_header = response.headers.get('Retry-After')
+                        if retry_after_header:
+                            try:
+                                wait_seconds = float(retry_after_header)
+                            except ValueError:
+                                wait_seconds = BACKOFF_BASE_SECONDS * (2 ** attempt)
+                        else:
+                            wait_seconds = BACKOFF_BASE_SECONDS * (2 ** attempt)
+                        # Add small jitter
+                        wait_seconds += random.uniform(0, 0.5)
+                        logger.warning(f"HTTP {status} received. Retrying in {wait_seconds:.2f}s (attempt {attempt + 1}/{MAX_RETRIES}).")
+                        time.sleep(wait_seconds)
+                        continue
+
+                # Log and return via common handler
+                logger.debug(f"{method} response status code: {response.status_code}")
+                logger.debug(f"{method} response headers: {json.dumps(dict(response.headers), indent=2)}")
+                logger.debug(f"{method} response body: {response.text}")
+                return self._handle_response(response, raw=raw)
+
+            except (ConnectionError, Timeout, RequestException) as err:
+                if attempt < MAX_RETRIES:
+                    wait_seconds = BACKOFF_BASE_SECONDS * (2 ** attempt) + random.uniform(0, 0.5)
+                    logger.warning(f"{method} {url} failed due to network error: {err}. Retrying in {wait_seconds:.2f}s (attempt {attempt + 1}/{MAX_RETRIES}).")
+                    time.sleep(wait_seconds)
+                    continue
+                logger.error(f"{method} {url} failed after retries due to network error: {err}")
+                return None
+            except Exception as e:
+                logger.error(f"{method} {url} unexpected error: {e}")
+                return None
+
+        # Should not reach here
+        logger.error(f"{method} {url} exhausted retries without success.")
+        return None
 
     def _handle_response(self, response, raw=False):
         """
