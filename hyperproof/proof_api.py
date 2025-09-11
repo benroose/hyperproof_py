@@ -10,6 +10,7 @@
 # allowing for operations related to proof, such as retrieving and managing proof data.
 
 import re
+from typing import Iterator, Optional
 from .utils import logger
 from .users_api import UsersAPI
 from .labels_api import LabelsAPI
@@ -26,7 +27,7 @@ class ProofAPI:
         self.users_api = UsersAPI(api_client)
         self.labels_api = LabelsAPI(api_client)
 
-    def get_proof_metadata_collection(self, limit=500, sort_by="uploadedOn", sort_direction="desc", object_type=None, object_id=None, raw=False):
+    def get_proof_metadata_collection(self, limit=500, sort_by="uploadedOn", sort_direction="desc", object_type=None, object_id=None, owned_by_me=None, search=None, raw=False):
         """
         Retrieve all proof metadata for an organization, control, label, or task, with pagination support.
 
@@ -40,7 +41,7 @@ class ProofAPI:
         :return: List of all available proof metadata.
         """
         all_proofs = []
-        next_token = None
+        offset_token = None
 
         while True:
             # Prepare the parameters for the API call
@@ -50,7 +51,9 @@ class ProofAPI:
                 'sortDirection': sort_direction,
                 'objectType': object_type,
                 'objectId': object_id,
-                'nextToken': next_token
+                'ownedByMe': owned_by_me,
+                'search': search,
+                'offset': offset_token
             }
 
             # Make the API call
@@ -62,11 +65,11 @@ class ProofAPI:
 
             all_proofs.extend(response.get('data', []))
 
-            # Check for the continuation token (nextToken) to determine if more data needs to be fetched
-            next_token = response.get('continuationToken', None)
+            # Check for the offset token to determine if more data needs to be fetched
+            offset_token = response.get('offsetToken', None)
 
             # If no nextToken is returned, we have retrieved all data
-            if not next_token:
+            if not offset_token:
                 break
 
         # Return all accumulated proofs
@@ -86,7 +89,7 @@ class ProofAPI:
         """
         return self.client.get(self.BASE_URL, f"/{proof_id}", raw=raw)
 
-    def add_proof(self, file_path, object_id=None, object_type=None, raw=False):
+    def add_proof(self, file_path, raw=False):
         """
         Upload a new proof file to the organization.
 
@@ -97,12 +100,8 @@ class ProofAPI:
         :return: Response data of the newly added proof.
         """
         with open(file_path, 'rb') as file:
-            files = {'file': file}
-            data = {}
-            if object_id and object_type:
-                data['objectId'] = object_id
-                data['objectType'] = object_type
-            return self.client.post(self.BASE_URL, "/", files=files, data=data, raw=raw)
+            files = {'proof': file}
+            return self.client.post(self.BASE_URL, "/", files=files, data=None, raw=raw)
 
     def add_proof_version(self, proof_id, file_path, raw=False):
         """
@@ -114,7 +113,7 @@ class ProofAPI:
         :return: Response data of the updated proof.
         """
         with open(file_path, 'rb') as file:
-            files = {'file': file}
+            files = {'proof': file}
             return self.client.post(self.BASE_URL, f"/{proof_id}/versions", files=files, raw=raw)
 
     def get_proof_contents(self, proof_id, version=None, raw=False):
@@ -168,7 +167,7 @@ class ProofAPI:
 
         # Fetch proofs with optional object_type and object_id filtering
         limit = 500
-        next_token = None
+        offset_token = None
         all_proofs = []
 
         while True:
@@ -179,7 +178,7 @@ class ProofAPI:
                 'sortDirection': 'desc',
                 'objectType': object_type,
                 'objectId': object_id,
-                'nextToken': next_token
+                'offset': offset_token
             }
 
             all_proofs_response = self.client.get(self.BASE_URL, '/', params=params, raw=False)
@@ -190,11 +189,11 @@ class ProofAPI:
             # Extend the list with data from the current response
             all_proofs.extend(all_proofs_response.get('data', []))
 
-            # Check for continuationToken to determine if more results exist
-            next_token = all_proofs_response.get('continuationToken', None)
+            # Check for offsetToken to determine if more results exist
+            offset_token = all_proofs_response.get('offsetToken', None)
 
             # If no continuationToken is returned, all results have been fetched
-            if not next_token:
+            if not offset_token:
                 break
 
         # Filter the returned proofs based on the createdBy field matching the filtered users
@@ -236,7 +235,7 @@ class ProofAPI:
 
         # Fetch proofs associated with the label using its ID
         all_proofs = []
-        next_token = None
+        offset_token = None
 
         while True:
             # Prepare parameters for fetching proofs
@@ -246,7 +245,7 @@ class ProofAPI:
                 'sortDirection': sort_direction,
                 'objectType': 'label',
                 'objectId': label_id,
-                'nextToken': next_token
+                'offset': offset_token
             }
 
             # Make the API request and handle errors via the core _handle_response method
@@ -261,9 +260,90 @@ class ProofAPI:
 
             all_proofs.extend(response.get('data', []))
 
-            # Check for continuationToken to fetch more data if available
-            next_token = response.get('continuationToken', None)
-            if not next_token:
+            # Check for offsetToken to fetch more data if available
+            offset_token = response.get('offsetToken', None)
+            if not offset_token:
                 break
 
         return all_proofs if not raw else response
+
+    def list_proof(
+        self,
+        limit: int = 50,
+        owned_by_me: bool = False,
+        search: Optional[str] = None,
+        sort_by: str = 'createdOn',
+        sort_direction: str = 'desc',
+        object_type: Optional[str] = None,
+        object_id: Optional[str] = None,
+    ) -> Iterator[dict]:
+        """
+        Stream (yield) proof items across all pages using the Hyperproof proof listing API.
+
+        This high-level method abstracts pagination, sorting, and filtering to provide
+        an easy-to-use generator over all available proof that match the provided criteria.
+
+        Parameters
+        ----------
+        limit : int, optional
+            Maximum number of items per API page (default 50). Must be >= 1.
+        owned_by_me : bool, optional
+            If True, only return proof owned by the authenticated user (default False).
+        search : str, optional
+            Case-insensitive substring filter applied to the proof filename.
+        sort_by : str, optional
+            Field used to sort results; one of: 'createdBy', 'createdOn', 'filename', 'uploadedOn'.
+            Defaults to 'createdOn'.
+        sort_direction : str, optional
+            Sort order direction; either 'asc' or 'desc'. Defaults to 'desc'.
+        object_type : str, optional
+            If provided, filters proof linked to the given object type ('control', 'label', or 'task').
+        object_id : str, optional
+            If provided with object_type, filters proof linked to the specified object id.
+
+        Yields
+        ------
+        dict
+            A single proof item (JSON object) per iteration.
+
+        Notes
+        -----
+        - This method automatically follows pagination using the 'offsetToken' pattern from Hyperproof.
+        - It issues repeated GET requests to `/v1/proof` until no further `offsetToken` is returned.
+        - Invalid `sort_by` and `sort_direction` values are not coerced here and should follow
+          Hyperproof API constraints; provide valid values to avoid API errors.
+        """
+        # Defensive clamp for per-page size
+        page_size = max(1, int(limit))
+
+        # Pagination state
+        offset_token: Optional[str] = None
+
+        while True:
+            params = {
+                'limit': page_size,
+                'sortBy': sort_by,
+                'sortDirection': sort_direction,
+                'ownedByMe': owned_by_me or None,  # omit if False
+                'search': search,
+                'objectType': object_type,
+                'objectId': object_id,
+                'offset': offset_token
+            }
+
+            response = self.client.get(self.BASE_URL, '/', params=params, raw=False)
+
+            if not response:
+                break
+
+            data = response.get('data') if isinstance(response, dict) else None
+            if not isinstance(data, list):
+                break
+
+            for item in data:
+                # Each item is expected to be a dict representing a proof record
+                yield item
+
+            offset_token = response.get('offsetToken') if isinstance(response, dict) else None
+            if not offset_token:
+                break
