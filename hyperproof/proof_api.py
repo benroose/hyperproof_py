@@ -265,7 +265,7 @@ class ProofAPI:
             if not offset_token:
                 break
 
-        return all_proofs if not raw else response
+        return all_proofs if not raw else all_proofs
 
     def list_proof(
         self,

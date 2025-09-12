@@ -13,7 +13,6 @@ pyvenv.cfg
  hyperproof.egg-info/
 lib/
 lib64/
-test/
 bin/
 build/
 backup/
@@ -56,7 +55,7 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
-test*
+test/
 
 # Jupyter Notebook
 .ipynb_checkpoints

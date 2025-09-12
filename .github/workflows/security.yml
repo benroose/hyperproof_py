@@ -1,0 +1,36 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pip-tools and safety
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety bandit
+
+      - name: Install project dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Safety vulnerability scan
+        run: |
+          safety check --full-report || true
+
+      - name: Bandit static analysis
+        run: |
+          bandit -r hyperproof -q -x tests || true
