@@ -4,9 +4,12 @@ This guide shows practical, runnable snippets for common Hyperproof API tasks us
 
 ## Prerequisites
 
-1) Install the library:
+1) Install the library from this repository (create a virtualenv recommended):
 ```bash
-pip install hyperproof
+git clone https://github.com/booyasatoshi/hyperproof.git
+cd hyperproof
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
 2) Configure credentials (recommended via .env):
@@ -16,7 +19,7 @@ CLIENT_ID="your_client_id"
 CLIENT_SECRET="your_client_secret"
 ```
 
-3) Basic usage pattern:
+3) Basic usage pattern (from repo root):
 ```python
 import hyperproof
 

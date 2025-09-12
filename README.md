@@ -37,19 +37,20 @@ A robust, production-ready Python wrapper for the Hyperproof API. This library p
 
 ## Installation
 
-Install from PyPI:
-
-```bash
-pip install hyperproof
-```
+This fork is currently distributed from GitHub (not PyPI).
 
 From source:
 
 ```bash
 git clone https://github.com/booyasatoshi/hyperproof.git
 cd hyperproof
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
+Notes:
+- Use the library from within the repository (or add the repository root to `PYTHONPATH`).
+- To run examples directly, prefix commands with `PYTHONPATH=.` from the repo root.
 
 ## Configuration
 
@@ -249,8 +250,16 @@ See `SECURITY.md` for detailed guidance.
 
 Contributions are welcome! Please open an issue or submit a PR with clear descriptions and tests where applicable.
 
+- Issues: https://github.com/booyasatoshi/hyperproof/issues
+- Pull Requests: https://github.com/booyasatoshi/hyperproof/pulls
+- Discussions (questions/usage help): https://github.com/booyasatoshi/hyperproof/discussions
+
 ## License
 
 GPL - GNU General Public License.
 
 This project is licensed under the GNU General Public License (GPL). Any modifications or derivative works must also be licensed under the GPL and include the source code.
+
+## Project origin and fork
+
+This repository is a maintained fork intended to provide a more robust, production-ready Python wrapper around the Hyperproof API with improved resiliency, pagination correctness, and convenience helpers. It was forked from an earlier public implementation. Credit to the original authors for the initial foundation. If you are looking for this maintained fork, please use this repository for issues and contributions.
