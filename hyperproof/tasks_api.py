@@ -134,7 +134,7 @@ class TasksAPI:
         """
         return self.client.get(self.BASE_URL, f"/{task_id}/proof", raw=raw)
 
-    def filter_tasks(self, target_object_type=None, target_object_ids=None, task_ids=None, assignee_ids=None, assignee_id=None, modified_after=None, raw=False):
+    def filter_tasks(self, target_object_type=None, target_object_ids=None, task_ids=None, assignee_ids=None, assignee_id=None, modified_after=None, task_status_id=None, raw=False):
         """
         Gets the set of tasks matching the supplied filter.
 
@@ -144,6 +144,7 @@ class TasksAPI:
         :param assignee_ids: List of assignee IDs to filter by (optional).
         :param assignee_id: Single assignee ID to filter by (optional).
         :param modified_after: Return tasks modified after this date (ISO 8601 format, optional).
+        :param task_status_id: Filter by a specific task status ID (optional).
         :param raw: If True, return raw response text; otherwise return parsed JSON.
         :return: Response data in the desired format (raw or parsed JSON).
         """
@@ -176,6 +177,11 @@ class TasksAPI:
         # Add modifiedAfter if provided
         if modified_after:
             data["modifiedAfter"] = modified_after
+
+        # Add task status filter if provided
+        if task_status_id:
+            # API commonly accepts a plural form for ID lists; use a list for extensibility
+            data["taskStatusIds"] = [task_status_id]
 
         logger.debug(f"Filter data: {data}")
         
