@@ -69,7 +69,6 @@ print(added)
 ```python
 import hyperproof
 
-# List proof metadata (auto-handles offset/offsetToken internally)
 proofs = hyperproof.get_proof_metadata_collection(limit=200, sort_by="uploadedOn", sort_direction="desc")
 print(f"Fetched {len(proofs)} proofs")
 
