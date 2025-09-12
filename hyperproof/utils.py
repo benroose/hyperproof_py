@@ -13,6 +13,8 @@
 # capture and report request issues.
 
 import requests
+from requests.adapters import HTTPAdapter
+from typing import Optional, Callable, Dict, Any
 import logging
 import time
 import random
@@ -31,6 +33,7 @@ TOKEN_ENDPOINT = "https://accounts.hyperproof.app/oauth/token"
 REQUEST_TIMEOUT_SECONDS = 30
 MAX_RETRIES = 3
 BACKOFF_BASE_SECONDS = 1.0
+DEFAULT_USER_AGENT = "hyperproof-python-wrapper/1.0"
 
 class APIClient:
     """
@@ -39,11 +42,23 @@ class APIClient:
     with the API (GET, POST, PUT, PATCH).
     """
     
-    def __init__(self, client_id, client_secret):
+    def __init__(
+        self,
+        client_id: str,
+        client_secret: str,
+        user_agent: Optional[str] = None,
+        session: Optional[requests.Session] = None,
+        on_retry: Optional[Callable[[int, int, int, str], None]] = None,
+        on_rate_limited: Optional[Callable[[float, Dict[str, Any]], None]] = None,
+    ):
         """
         Initializes the APIClient with the given client credentials and authenticates immediately.
         - client_id: The OAuth client ID for authenticating with Hyperproof.
-        - client_secret: The OAuth client secret for authenticating with Hyperproof.
+        - client_secret: The OAuth client secret for authenticicating with Hyperproof.
+        - user_agent: Optional custom User-Agent header value.
+        - session: Optional pre-configured requests.Session for connection reuse.
+        - on_retry: Optional callback invoked before sleeping on retry (attempt, max_retries, status_code, method).
+        - on_rate_limited: Optional callback invoked when a 429 is received with computed wait seconds and response headers.
         
         The access_token is initially set to None. Upon initialization, the client attempts to 
         authenticate by calling the `_authenticate()` method.
@@ -51,6 +66,19 @@ class APIClient:
         self.client_id = client_id
         self.client_secret = client_secret
         self.access_token = None  # Access token will be set upon successful authentication.
+        self.user_agent = user_agent or DEFAULT_USER_AGENT
+        self.on_retry = on_retry
+        self.on_rate_limited = on_rate_limited
+        
+        # Configure a session for connection pooling and performance
+        self.session = session or requests.Session()
+        try:
+            adapter = HTTPAdapter(pool_connections=10, pool_maxsize=10)
+            self.session.mount("https://", adapter)
+            self.session.mount("http://", adapter)
+        except Exception:
+            # Fallback silently; requests will still function without custom adapter
+            pass
         
         logger.debug(f"Initializing APIClient with client_id: {client_id}")
         
@@ -113,7 +141,8 @@ class APIClient:
         # requests to set appropriate multipart boundaries for file uploads.
         headers = {
             'Authorization': f'Bearer {self.access_token}',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'User-Agent': self.user_agent
         }
         # Avoid logging Authorization headers to prevent token leakage
         logger.debug("Request headers prepared")
@@ -201,7 +230,7 @@ class APIClient:
         # Attempt counter for retryable status codes
         for attempt in range(0, MAX_RETRIES + 1):
             try:
-                response = requests.request(
+                response = self.session.request(
                     method,
                     url,
                     headers=self._get_headers(),
@@ -218,7 +247,7 @@ class APIClient:
                 if status == 401:
                     logger.warning("Received 401 Unauthorized. Attempting to refresh token and retry once.")
                     self._authenticate()
-                    response = requests.request(
+                    response = self.session.request(
                         method,
                         url,
                         headers=self._get_headers(),
@@ -243,7 +272,19 @@ class APIClient:
                             wait_seconds = BACKOFF_BASE_SECONDS * (2 ** attempt)
                         # Add small jitter
                         wait_seconds += random.uniform(0, 0.5)
+                        # Callback on rate limit
+                        if status == 429 and self.on_rate_limited:
+                            try:
+                                self.on_rate_limited(wait_seconds, dict(response.headers))
+                            except Exception:
+                                pass
                         logger.warning(f"HTTP {status} received. Retrying in {wait_seconds:.2f}s (attempt {attempt + 1}/{MAX_RETRIES}).")
+                        # Generic retry callback
+                        if self.on_retry:
+                            try:
+                                self.on_retry(attempt + 1, MAX_RETRIES, status, method)
+                            except Exception:
+                                pass
                         time.sleep(wait_seconds)
                         continue
 
