@@ -22,6 +22,7 @@ A robust, production-ready Python wrapper for the Hyperproof API. This library p
 - [Advanced Usage](#advanced-usage)
   - [Auto-paginating list_proof generator](#auto-paginating-list_proof-generator)
 - [API Coverage](#api-coverage)
+- [Security](#security)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -234,6 +235,15 @@ This wrapper provides a 1:1 mapping for the following APIs plus convenience meth
 - Tasks API: `add_task`, `get_task_by_id`, `update_task`, `filter_tasks`, `add_task_comment`, `update_task_comment`, `delete_task_comment`, `add_task_proof`, `get_task_proof_metadata`, plus helpers `get_all_tasks`, `get_all_tasks_by_status`, `get_tasks_by_user`
 - Roles API: `get_roles`
 - Users API: `get_current_user`, `get_organization_users`
+
+## Security
+
+- Credentials: Use a secret manager or environment variables; `.env` is for local dev only. Rotate secrets regularly and grant least privilege.
+- Logging: This library avoids logging auth secrets; do not enable debug logging in production. Configure your app logger (the library uses a NullHandler by default).
+- Transport: All requests use HTTPS with TLS verification (via `requests`).
+- Resiliency: Built-in timeouts and limited retries with jitter. Monitor and alert on repeated 429/5xx.
+
+See `SECURITY.md` for detailed guidance.
 
 ## Contributing
 

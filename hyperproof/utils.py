@@ -19,24 +19,10 @@ import random
 from requests.exceptions import HTTPError, RequestException, Timeout, ConnectionError
 import json
 
-# Set up logging
-# A logger named 'Hyperproof API' is created to capture logs for this module.
+# Library logger; do not configure handlers by default to avoid leaking secrets
 logger = logging.getLogger('Hyperproof API')
-logger.setLevel(logging.INFO)  # Default logging level set to INFO
-
-# Create a console handler for the logger and set its logging level to DEBUG.
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-
-# Formatter is created to display logs in a specific format: time, logger name, 
-# logging level, and the actual log message.
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-# Attach the formatter to the console handler.
-ch.setFormatter(formatter)
-
-# Attach the console handler to the logger.
-logger.addHandler(ch)
+if not logger.handlers:
+    logger.addHandler(logging.NullHandler())
 
 # OAuth token endpoint for Hyperproof's authentication.
 TOKEN_ENDPOINT = "https://accounts.hyperproof.app/oauth/token"
@@ -89,16 +75,15 @@ class APIClient:
             "client_secret": self.client_secret
         }
         
-        logger.debug(f"Authentication params: {json.dumps(params, indent=2)}")
+        # Do not log secrets or sensitive authentication parameters
+        logger.debug("Authentication params prepared")
         
         try:
             # Sending POST request to OAuth token endpoint to obtain the access token.
             response = requests.post(TOKEN_ENDPOINT, data=params)
             
-            # Log the status code and response details for debugging purposes.
+            # Log only non-sensitive status information
             logger.debug(f"Token request status code: {response.status_code}")
-            logger.debug(f"Token response headers: {json.dumps(dict(response.headers), indent=2)}")
-            logger.debug(f"Token response body: {response.text}")
 
             if response.status_code == 200:
                 # Parse and store the access token if authentication is successful.
@@ -107,7 +92,7 @@ class APIClient:
                 logger.debug("Access token retrieved successfully")
             else:
                 # Log an error if the token request fails (e.g., invalid credentials).
-                logger.error(f"Failed to retrieve access token: {response.status_code} {response.text}")
+                logger.error(f"Failed to retrieve access token: {response.status_code}")
                 self.access_token = None
         except (HTTPError, ConnectionError, Timeout, RequestException) as err:
             # Catch common HTTP request errors and log them.
@@ -130,7 +115,8 @@ class APIClient:
             'Authorization': f'Bearer {self.access_token}',
             'Accept': 'application/json'
         }
-        logger.debug(f"Request headers: {json.dumps(headers, indent=2)}")
+        # Avoid logging Authorization headers to prevent token leakage
+        logger.debug("Request headers prepared")
         return headers
 
     def get(self, base_url, endpoint, params=None, raw=False):
@@ -158,11 +144,8 @@ class APIClient:
         """
         url = f"{base_url}{endpoint}"
         logger.debug(f"Sending POST request to: {url}")
-        try:
-            logger.debug(f"POST request data: {json.dumps(data, indent=2)}")
-        except Exception:
-            logger.debug("POST request data: <non-serializable or None>")
-        logger.debug(f"POST request files: {files is not None}")
+        logger.debug("POST request payload prepared")
+        logger.debug(f"POST request has files: {files is not None}")
         return self._send_request("POST", url, json=data if not files else None, files=files, data=data if files else None, raw=raw)
 
     def put(self, base_url, endpoint, data=None, raw=False):
@@ -175,7 +158,7 @@ class APIClient:
         """
         url = f"{base_url}{endpoint}"
         logger.debug(f"Sending PUT request to: {url}")
-        logger.debug(f"PUT request data: {json.dumps(data, indent=2)}")
+        logger.debug("PUT request payload prepared")
         
         return self._send_request("PUT", url, json=data, raw=raw)
 
@@ -189,7 +172,7 @@ class APIClient:
         """
         url = f"{base_url}{endpoint}"
         logger.debug(f"Sending PATCH request to: {url}")
-        logger.debug(f"PATCH request data: {json.dumps(data, indent=2)}")
+        logger.debug("PATCH request payload prepared")
         
         return self._send_request("PATCH", url, json=data, raw=raw)
 
@@ -264,10 +247,8 @@ class APIClient:
                         time.sleep(wait_seconds)
                         continue
 
-                # Log and return via common handler
+                # Log minimal status information only
                 logger.debug(f"{method} response status code: {response.status_code}")
-                logger.debug(f"{method} response headers: {json.dumps(dict(response.headers), indent=2)}")
-                logger.debug(f"{method} response body: {response.text}")
                 return self._handle_response(response, raw=raw)
 
             except (ConnectionError, Timeout, RequestException) as err:
