@@ -119,19 +119,20 @@ class ProofAPI:
             files = {'proof': file}
             return self.client.post(self.BASE_URL, f"/{proof_id}/versions", files=files, raw=raw)
 
-    def get_proof_contents(self, proof_id, version=None, raw=False):
+    def get_proof_contents(self, proof_id, version=None, raw=True):
         """
         Retrieve the contents of a proof as a file.
 
         :param proof_id: The ID of the proof to retrieve.
         :param version: The version of the proof to retrieve (optional).
-        :param raw: If True, return raw response.
-        :return: The contents of the proof file.
+        :param raw: If True, return raw response (default True for binary content).
+        :return: The contents of the proof file as bytes.
         """
         params = {}
         if version:
             params['version'] = version
-        return self.client.get(self.BASE_URL, f"/{proof_id}/contents", params=params, raw=raw)
+        # Always use raw=True for proof contents since they are binary files, not JSON
+        return self.client.get(self.BASE_URL, f"/{proof_id}/contents", params=params, raw=True)
 
     def get_proof_by_user(self, userid=None, givenName=None, surname=None, object_type=None, object_id=None, raw=False):
         """

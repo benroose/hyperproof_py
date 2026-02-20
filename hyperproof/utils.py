@@ -313,14 +313,16 @@ class APIClient:
         Handles the response from an API request, raising exceptions for HTTP errors
         and parsing the response body as JSON (unless raw=True is specified).
         - response: The HTTP response object.
-        - raw: If True, returns the raw response body; otherwise, parses as JSON.
+        - raw: If True, returns the raw response body as bytes; otherwise, parses as JSON.
         """
         try:
             # Raise an exception if the response contains an HTTP error status code.
             response.raise_for_status()
             
             if raw:
-                return response.text  # Return raw text if specified.
+                # Return raw bytes for binary content (e.g., proof files)
+                # Use response.content instead of response.text to handle binary data correctly
+                return response.content
             
             return self._parse_json(response)  # Parse JSON by default.
         except HTTPError as http_err:
