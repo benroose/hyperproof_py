@@ -6,8 +6,8 @@ This guide shows practical, runnable snippets for common Hyperproof API tasks us
 
 1) Install the library from this repository (create a virtualenv recommended):
 ```bash
-git clone https://github.com/benroose/hyperproof_PyWrapper-forked.git
-cd hyperproof_PyWrapper-forked
+git clone https://github.com/benroose/hyperproof_py.git
+cd hyperproof_py
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```

@@ -47,8 +47,8 @@ This fork is currently distributed from GitHub (not PyPI).
 From source:
 
 ```bash
-git clone https://github.com/benroose/hyperproof_PyWrapper-forked.git
-cd hyperproof_PyWrapper-forked
+git clone https://github.com/benroose/hyperproof_py.git
+cd hyperproof_py
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -330,8 +330,8 @@ See `SECURITY.md` for detailed guidance.
 
 Contributions are welcome! Please open an issue or submit a PR with clear descriptions and tests where applicable.
 
-- Issues: https://github.com/benroose/hyperproof_PyWrapper-forked/issues
-- Pull Requests: https://github.com/benroose/hyperproof_PyWrapper-forked/pulls
+- Issues: https://github.com/benroose/hyperproof_py/issues
+- Pull Requests: https://github.com/benroose/hyperproof_py/pulls
 
 ## License
 
@@ -342,7 +342,7 @@ This project is licensed under the GNU General Public License (GPL). Any modific
 ## Project origin and maintenance
 
 **This repository is the active source of truth** for ongoing Hyperproof Python wrapper work
-([benroose/hyperproof_PyWrapper-forked](https://github.com/benroose/hyperproof_PyWrapper-forked)).
+([benroose/hyperproof_py](https://github.com/benroose/hyperproof_py)).
 Development happens on this fork’s `master` branch. We are **not syncing from or contributing
 back to** [booyasatoshi/hyperproof](https://github.com/booyasatoshi/hyperproof) as an upstream
 project — that repository appears inactive, and this fork is maintained independently.
