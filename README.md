@@ -137,6 +137,9 @@ proofs = hyperproof.get_proof_metadata_collection(limit=200, sort_by="uploadedOn
 # Upload a new proof (multipart uses the correct field name `proof`)
 created = hyperproof.add_proof(file_path="/path/to/proof.pdf")
 
+# Upload a proof with ownership specified
+created = hyperproof.add_proof(file_path="/path/to/proof.pdf", proof_owned_by="user-id")
+
 # Upload a new version of an existing proof
 updated = hyperproof.add_proof_version(proof_id="existing-proof-id", file_path="/path/to/new-version.pdf")
 

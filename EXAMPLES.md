@@ -79,6 +79,10 @@ print(f"Fetched {len(proofs)} proofs")
 created = hyperproof.add_proof(file_path="/path/to/proof.pdf")
 print(created)
 
+# Upload a proof with ownership specified
+created = hyperproof.add_proof(file_path="/path/to/proof.pdf", proof_owned_by="user-id")
+print(created)
+
 # Add a new version of an existing proof
 updated = hyperproof.add_proof_version(proof_id="existing-proof-id", file_path="/path/to/new-version.pdf")
 print(updated)

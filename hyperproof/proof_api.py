@@ -89,19 +89,22 @@ class ProofAPI:
         """
         return self.client.get(self.BASE_URL, f"/{proof_id}", raw=raw)
 
-    def add_proof(self, file_path, raw=False):
+    def add_proof(self, file_path, proof_owned_by=None, raw=False):
         """
         Upload a new proof file to the organization.
 
         :param file_path: Path to the proof file to upload.
-        :param object_id: The object ID the proof is related to (optional).
-        :param object_type: The object type (control or label, optional).
+        :param proof_owned_by: ID of the proof owner (optional). Maps to hp-proof-owned-by header.
         :param raw: If True, return raw response text; otherwise return parsed JSON.
         :return: Response data of the newly added proof.
         """
         with open(file_path, 'rb') as file:
             files = {'proof': file}
-            return self.client.post(self.BASE_URL, "/", files=files, data=None, raw=raw)
+            # Additional metadata must be sent as multipart form fields (not JSON)
+            data = {}
+            if proof_owned_by:
+                data["hp-proof-owned-by"] = proof_owned_by
+            return self.client.post(self.BASE_URL, "/", files=files, data=data if data else None, raw=raw)
 
     def add_proof_version(self, proof_id, file_path, raw=False):
         """
@@ -116,19 +119,20 @@ class ProofAPI:
             files = {'proof': file}
             return self.client.post(self.BASE_URL, f"/{proof_id}/versions", files=files, raw=raw)
 
-    def get_proof_contents(self, proof_id, version=None, raw=False):
+    def get_proof_contents(self, proof_id, version=None, raw=True):
         """
         Retrieve the contents of a proof as a file.
 
         :param proof_id: The ID of the proof to retrieve.
         :param version: The version of the proof to retrieve (optional).
-        :param raw: If True, return raw response.
-        :return: The contents of the proof file.
+        :param raw: If True, return raw response (default True for binary content).
+        :return: The contents of the proof file as bytes.
         """
         params = {}
         if version:
             params['version'] = version
-        return self.client.get(self.BASE_URL, f"/{proof_id}/contents", params=params, raw=raw)
+        # Always use raw=True for proof contents since they are binary files, not JSON
+        return self.client.get(self.BASE_URL, f"/{proof_id}/contents", params=params, raw=True)
 
     def get_proof_by_user(self, userid=None, givenName=None, surname=None, object_type=None, object_id=None, raw=False):
         """
