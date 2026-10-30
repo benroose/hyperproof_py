@@ -6,8 +6,8 @@ This guide shows practical, runnable snippets for common Hyperproof API tasks us
 
 1) Install the library from this repository (create a virtualenv recommended):
 ```bash
-git clone https://github.com/booyasatoshi/hyperproof.git
-cd hyperproof
+git clone https://github.com/benroose/hyperproof_PyWrapper-forked.git
+cd hyperproof_PyWrapper-forked
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -173,4 +173,39 @@ print(f"Users: {len(users)}")
 
 roles = hyperproof.get_roles()
 print(f"Roles: {len(roles)}")
+```
+
+## Groups
+
+```python
+import hyperproof
+
+groups = hyperproof.get_groups(status="active", expand="userIds")
+print(f"Groups: {len(groups)}")
+
+# members = hyperproof.get_group_members(group_id="your-group-id")
+# print(members)
+```
+## Role Assignments
+
+```python
+import hyperproof
+
+# Filter (read-only) — find object-level assignments for a user
+assignments = hyperproof.filter_role_assignments(
+    user_ids=["your-userId"],
+    direct_assignments_only=True,
+)
+print(f"Assignments: {len(assignments) if isinstance(assignments, list) else assignments}")
+
+# Mutating examples (commented — use deliberately):
+# created = hyperproof.add_role_assignment(
+#     role_kind="auditor",
+#     principal_id="your-userId",
+#     principal_type="user",
+#     target_object_id="your-program-id",
+#     target_object_type="program",
+# )
+# hyperproof.update_role_assignment(role_assignment_id=created["id"], role_kind="viewer")
+# hyperproof.delete_role_assignment(role_assignment_id=created["id"])
 ```

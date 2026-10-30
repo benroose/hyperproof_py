@@ -35,6 +35,45 @@ MAX_RETRIES = 3
 BACKOFF_BASE_SECONDS = 1.0
 DEFAULT_USER_AGENT = "hyperproof-python-wrapper/1.0"
 
+
+class HyperproofAPIError(Exception):
+    """Raised when a Hyperproof API request fails after retries (if any).
+
+    Attributes:
+        status_code: HTTP status code when available (None for network failures).
+        response_text: Truncated response body for diagnostics.
+        method: HTTP method used for the request.
+        url: Request URL.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: Optional[int] = None,
+        response_text: str = "",
+        method: Optional[str] = None,
+        url: Optional[str] = None,
+    ):
+        super().__init__(message)
+        self.status_code = status_code
+        self.response_text = response_text or ""
+        self.method = method
+        self.url = url
+
+    def __str__(self) -> str:
+        parts = [super().__str__()]
+        if self.status_code is not None:
+            parts.append(f"status={self.status_code}")
+        if self.method and self.url:
+            parts.append(f"{self.method} {self.url}")
+        elif self.url:
+            parts.append(self.url)
+        if self.response_text:
+            parts.append(self.response_text[:300])
+        return " | ".join(parts)
+
+
 class APIClient:
     """
     The APIClient class handles authentication via OAuth2 and makes HTTP requests to the Hyperproof API.
@@ -222,10 +261,15 @@ class APIClient:
         Internal helper to send HTTP requests with retries and 401 refresh.
         Retries on 429 and 5xx responses, and on common transient exceptions.
         On 401, re-authenticates once and retries immediately.
+
+        Raises:
+            HyperproofAPIError: On HTTP error responses or exhausted network retries.
         """
         filtered_params = {k: v for k, v in (params or {}).items() if v is not None}
         filtered_json = {k: v for k, v in (json or {}).items() if v is not None} if json else None
         filtered_data = {k: v for k, v in (data or {}).items() if v is not None} if data else None
+
+        last_network_error: Optional[BaseException] = None
 
         # Attempt counter for retryable status codes
         for attempt in range(0, MAX_RETRIES + 1):
@@ -290,66 +334,83 @@ class APIClient:
 
                 # Log minimal status information only
                 logger.debug(f"{method} response status code: {response.status_code}")
-                return self._handle_response(response, raw=raw)
+                return self._handle_response(response, raw=raw, method=method, url=url)
 
+            except HyperproofAPIError:
+                # Propagate API failures from _handle_response; do not swallow.
+                raise
             except (ConnectionError, Timeout, RequestException) as err:
+                last_network_error = err
                 if attempt < MAX_RETRIES:
                     wait_seconds = BACKOFF_BASE_SECONDS * (2 ** attempt) + random.uniform(0, 0.5)
                     logger.warning(f"{method} {url} failed due to network error: {err}. Retrying in {wait_seconds:.2f}s (attempt {attempt + 1}/{MAX_RETRIES}).")
                     time.sleep(wait_seconds)
                     continue
                 logger.error(f"{method} {url} failed after retries due to network error: {err}")
-                return None
+                raise HyperproofAPIError(
+                    f"Network error after retries: {err}",
+                    method=method,
+                    url=url,
+                ) from err
             except Exception as e:
                 logger.error(f"{method} {url} unexpected error: {e}")
-                return None
+                raise HyperproofAPIError(
+                    f"Unexpected error: {e}",
+                    method=method,
+                    url=url,
+                ) from e
 
-        # Should not reach here
+        # Exhausted retries on 429/5xx — raise using the last response if available
         logger.error(f"{method} {url} exhausted retries without success.")
-        return None
+        raise HyperproofAPIError(
+            "Exhausted retries without success",
+            method=method,
+            url=url,
+            response_text=str(last_network_error or ""),
+        )
 
-    def _handle_response(self, response, raw=False):
+    def _handle_response(self, response, raw=False, method=None, url=None):
         """
-        Handles the response from an API request, raising exceptions for HTTP errors
-        and parsing the response body as JSON (unless raw=True is specified).
+        Handles the response from an API request, raising HyperproofAPIError for
+        HTTP errors and parsing the response body as JSON (unless raw=True).
+
         - response: The HTTP response object.
         - raw: If True, returns the raw response body as bytes; otherwise, parses as JSON.
+        - method/url: Optional request context included on raised errors.
         """
         try:
-            # Raise an exception if the response contains an HTTP error status code.
             response.raise_for_status()
-            
-            if raw:
-                # Return raw bytes for binary content (e.g., proof files)
-                # Use response.content instead of response.text to handle binary data correctly
-                return response.content
-            
-            return self._parse_json(response)  # Parse JSON by default.
         except HTTPError as http_err:
-            logger.error(f"HTTP error occurred: {http_err} - {response.text}")
-            return None
-        except ValueError as val_err:
-            logger.error(f"JSON decoding error: {val_err}")
-            return None
-        except Exception as err:
-            logger.error(f"An error occurred when handling the response: {err}")
-            return None
+            body = response.text or ""
+            logger.error(f"HTTP error occurred: {http_err} - {body}")
+            raise HyperproofAPIError(
+                str(http_err),
+                status_code=response.status_code,
+                response_text=body,
+                method=method,
+                url=url or getattr(response, "url", None),
+            ) from http_err
+
+        if raw:
+            # Return raw bytes for binary content (e.g., proof files)
+            return response.content
+
+        return self._parse_json(response)
 
     def _parse_json(self, response):
         """
-        Safely parses the JSON content of a response, handling content-type validation
-        and logging errors for unexpected or invalid content.
-        - response: The HTTP response object to parse.
-        Returns the parsed JSON object or an empty dictionary if parsing fails.
+        Safely parses the JSON content of a response.
+        Empty bodies (e.g. HTTP 204) return {}.
+        Non-JSON content types log and return {}.
         """
+        if not response.content:
+            return {}
+        content_type = response.headers.get("Content-Type", "")
         try:
-            # Ensure the response content-type is JSON before attempting to parse.
-            if 'application/json' in response.headers.get('Content-Type', ''):
-                return response.json()  # Parse the response body as JSON.
-            else:
-                logger.error(f"Unexpected content type: {response.headers.get('Content-Type')}")
-                return {}
+            if "application/json" in content_type or not content_type:
+                return response.json()
+            logger.error(f"Unexpected content type: {content_type}")
+            return {}
         except ValueError as val_err:
-            # Log the JSON parsing error and return an empty dictionary.
             logger.error(f"Error parsing JSON: {val_err}")
             return {}

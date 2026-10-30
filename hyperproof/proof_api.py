@@ -252,13 +252,18 @@ class ProofAPI:
                 'offset': offset_token
             }
 
-            # Make the API request and handle errors via the core _handle_response method
-            response = self.client.get(self.BASE_URL, "/", params=params, raw=False)
-            
-            if response is None:
-                # Handle the case where the user doesn't have permission (403)
-                raise PermissionError(f"Access to the label '{label_name}' is forbidden. Please ensure you have joined the label.")
-            
+            # Make the API request; client raises HyperproofAPIError on HTTP failure
+            try:
+                response = self.client.get(self.BASE_URL, "/", params=params, raw=False)
+            except Exception as err:
+                status = getattr(err, "status_code", None)
+                if status == 403:
+                    raise PermissionError(
+                        f"Access to the label '{label_name}' is forbidden. "
+                        "Please ensure you have joined the label."
+                    ) from err
+                raise
+
             if 'data' not in response:
                 raise ValueError("No data returned from get_proof_metadata_collection.")
 

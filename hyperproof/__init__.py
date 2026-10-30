@@ -10,7 +10,7 @@ client_id = os.getenv("CLIENT_ID")
 client_secret = os.getenv("CLIENT_SECRET")
 
 # Import API client and API classes
-from .utils import APIClient
+from .utils import APIClient, HyperproofAPIError
 from .controls_api import ControlsAPI
 from .proof_api import ProofAPI
 from .labels_api import LabelsAPI
@@ -21,6 +21,8 @@ from .roles_api import RolesAPI
 from .tasks_api import TasksAPI
 from .task_statuses_api import TaskStatusesAPI
 from .users_api import UsersAPI
+from .groups_api import GroupsAPI
+from .roleassignments_api import RoleAssignmentsAPI
 
 # Create a single APIClient instance
 _api_client = APIClient(client_id, client_secret)
@@ -52,6 +54,8 @@ _roles_api = LazyAuth(RolesAPI(_api_client))
 _tasks_api = LazyAuth(TasksAPI(_api_client))
 _task_statuses_api = LazyAuth(TaskStatusesAPI(_api_client))
 _users_api = LazyAuth(UsersAPI(_api_client))
+_groups_api = LazyAuth(GroupsAPI(_api_client))
+_roleassignments_api = LazyAuth(RoleAssignmentsAPI(_api_client))
 
 # Explicitly expose all methods
 # ControlsAPI methods
@@ -124,8 +128,25 @@ get_roles = lazy_method(_roles_api, 'get_roles')
 get_current_user = lazy_method(_users_api, 'get_current_user')
 get_organization_users = lazy_method(_users_api, 'get_organization_users')
 
+# GroupsAPI methods
+get_groups = lazy_method(_groups_api, 'get_groups')
+get_group_by_id = lazy_method(_groups_api, 'get_group_by_id')
+add_group = lazy_method(_groups_api, 'add_group')
+update_group = lazy_method(_groups_api, 'update_group')
+get_all_group_members = lazy_method(_groups_api, 'get_all_group_members')
+get_group_members = lazy_method(_groups_api, 'get_group_members')
+add_group_members = lazy_method(_groups_api, 'add_group_members')
+remove_group_members = lazy_method(_groups_api, 'remove_group_members')
+
+# RoleAssignmentsAPI methods
+add_role_assignment = lazy_method(_roleassignments_api, 'add_role_assignment')
+filter_role_assignments = lazy_method(_roleassignments_api, 'filter_role_assignments')
+update_role_assignment = lazy_method(_roleassignments_api, 'update_role_assignment')
+delete_role_assignment = lazy_method(_roleassignments_api, 'delete_role_assignment')
+
 # List all exposed methods
 __all__ = [
+    'APIClient', 'HyperproofAPIError',
     'get_controls', 'get_control_summaries', 'get_controls_by_user', 
     'update_control', 'add_control_proof',
     'get_control_by_id', 'add_control', 'get_proof_metadata_collection',
@@ -139,7 +160,12 @@ __all__ = [
     'filter_risks', 'get_all_tasks', 'get_all_tasks_by_status',
     'add_task', 'get_task_by_id', 'get_tasks_by_user', 'update_task', 'add_task_proof',
     'filter_tasks', 'add_task_comment', 'get_task_statuses', 'get_roles',
-    'get_current_user', 'get_organization_users'
+    'get_current_user', 'get_organization_users',
+    'get_groups', 'get_group_by_id', 'add_group', 'update_group',
+    'get_all_group_members', 'get_group_members', 'add_group_members',
+    'remove_group_members',
+    'add_role_assignment', 'filter_role_assignments',
+    'update_role_assignment', 'delete_role_assignment',
 ]
 
 
